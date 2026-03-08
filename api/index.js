@@ -9,34 +9,39 @@ import cors from 'cors';
 dotenv.config();
 
 const app = express();
-
 const PORT = process.env.PORT || 3007;
 
 app.use(cors()); 
 app.use(express.json());
 
-// 1. Conexión a MongoDB con Mongoose
 const uri = process.env.MONGODB_URI;
 
-// Evitamos reconexiones constantes en Serverless
-if (mongoose.connection.readyState === 0) {
-    mongoose.connect(uri)
-      .then(() => console.log("Conectado a MongoDB Atlas"))
-      .catch(err => console.error("Error al conectar a MongoDB:", err));
-}
+// Middleware para asegurar la conexión antes de cualquier ruta
+const connectDB = async (req, res, next) => {
+    if (mongoose.connection.readyState >= 1) {
+        return next();
+    }
+    try {
+        await mongoose.connect(uri);
+        console.log("🚀 Conectado a MongoDB Atlas");
+        next();
+    } catch (err) {
+        console.error("🔥 Error de conexión:", err);
+        res.status(500).json({ message: "Error de conexión a la base de datos" });
+    }
+};
 
-// 2. Monitoreo de estados (Para depurar errores de Atlas)
-mongoose.connection.on('connected', () => console.log('🚀 Mongoose conectado a Atlas'));
-mongoose.connection.on('error', (err) => console.log('🔥 Error de Mongoose:', err));
-mongoose.connection.on('disconnected', () => console.log('🔌 Mongoose desconectado'));
+// Aplicar el middleware de conexión a todas las rutas de la API
+app.use('/api', connectDB);
 
-// 3. Modelo de datos
-const Category = mongoose.model('Category', { 
+// Definición del modelo (evitando errores de re-compilación en Vercel)
+const Category = mongoose.models.Category || mongoose.model('Category', { 
   name: { type: String, required: true }, 
   imageUrl: { type: String, required: true } 
 });
 
-// 4. CRUD con Try/Catch
+// --- TUS RUTAS CRUD ---
+
 app.get('/api/categories', async (req, res) => {
     try {
         const categories = await Category.find();
@@ -65,10 +70,10 @@ app.delete('/api/categories/:id', async (req, res) => {
     }
 });
 
-// IMPORTANTE PARA LOCAL
+// Local
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, () => console.log(`Servidor en puerto ${PORT}`));
 }
 
-// IMPORTANTE PARA VERCEL
+// Vercel
 export default app;
