@@ -16,32 +16,37 @@ app.use(express.json());
 
 const uri = process.env.MONGODB_URI;
 
-// Middleware para asegurar la conexión antes de cualquier ruta
+// 1. Middleware de Conexión (Garantiza DB lista)
 const connectDB = async (req, res, next) => {
-    if (mongoose.connection.readyState >= 1) {
-        return next();
-    }
+    if (mongoose.connection.readyState >= 1) return next();
     try {
         await mongoose.connect(uri);
-        console.log("🚀 Conectado a MongoDB Atlas");
         next();
     } catch (err) {
-        console.error("🔥 Error de conexión:", err);
         res.status(500).json({ message: "Error de conexión a la base de datos" });
     }
 };
 
-// Aplicar el middleware de conexión a todas las rutas de la API
+// 2. Middleware de Seguridad (Protege POST y DELETE)
+const verifyApiKey = (req, res, next) => {
+    const apiKey = req.headers['x-api-key'];
+    if (apiKey && apiKey === process.env.API_SECRET_KEY) {
+        next();
+    } else {
+        res.status(403).json({ message: "Acceso denegado: API Key inválida" });
+    }
+};
+
 app.use('/api', connectDB);
 
-// Definición del modelo (evitando errores de re-compilación en Vercel)
 const Category = mongoose.models.Category || mongoose.model('Category', { 
   name: { type: String, required: true }, 
   imageUrl: { type: String, required: true } 
 });
 
-// --- TUS RUTAS CRUD ---
+// --- RUTAS ---
 
+// Pública: Cualquiera puede ver las categorías
 app.get('/api/categories', async (req, res) => {
     try {
         const categories = await Category.find();
@@ -51,7 +56,8 @@ app.get('/api/categories', async (req, res) => {
     }
 });
 
-app.post('/api/categories', async (req, res) => {
+// Protegida: Solo con API Key
+app.post('/api/categories', verifyApiKey, async (req, res) => {
     try {
         const newCategory = await Category.create(req.body);
         res.status(201).json(newCategory);
@@ -60,7 +66,8 @@ app.post('/api/categories', async (req, res) => {
     }
 });
 
-app.delete('/api/categories/:id', async (req, res) => {
+// Protegida: Solo con API Key
+app.delete('/api/categories/:id', verifyApiKey, async (req, res) => {
     try {
         const deleted = await Category.findByIdAndDelete(req.params.id);
         if (!deleted) return res.status(404).json({ message: "No se encontró" });
@@ -70,10 +77,8 @@ app.delete('/api/categories/:id', async (req, res) => {
     }
 });
 
-// Local
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, () => console.log(`Servidor en puerto ${PORT}`));
 }
 
-// Vercel
 export default app;
