@@ -29,11 +29,22 @@ const connectDB = async (req, res, next) => {
 
 // 2. Middleware de Seguridad (Protege POST y DELETE)
 const verifyApiKey = (req, res, next) => {
-    const apiKey = req.headers['x-api-key'];
-    if (apiKey && apiKey === process.env.API_SECRET_KEY) {
+    // Buscamos el header de forma más flexible
+    const apiKeyRecibida = req.headers['x-api-key'] || req.get('x-api-key');
+    const apiKeyEsperada = process.env.API_SECRET_KEY;
+
+    // LOGS para ver en el panel de Vercel (Pestaña Logs)
+    console.log("--- DEBUG SEGURIDAD ---");
+    console.log("Key Recibida:", apiKeyRecibida);
+    console.log("Key Esperada:", apiKeyEsperada ? "Configurada (OK)" : "NO CONFIGURADA (ERROR)");
+
+    if (apiKeyRecibida && apiKeyRecibida === apiKeyEsperada) {
         next();
     } else {
-        res.status(403).json({ message: "Acceso denegado: API Key inválida" });
+        res.status(403).json({ 
+            message: "API Key inválida",
+            error: !apiKeyEsperada ? "La variable no existe en el servidor" : "La clave no coincide"
+        });
     }
 };
 
